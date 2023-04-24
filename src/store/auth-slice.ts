@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 type TAuthState = {
   accessToken: string | null;
@@ -32,15 +32,25 @@ export const authSlice = createSlice({
 export const refreshAccessToken = createAsyncThunk(
   'auth/refreshAccessToken',
   async (refreshToken: string) => {
-    /** Requesting a new access token using our refresh token.
-     * Server will create a new access token and send it to the frontend.
-     * Refresh token is required to authenticate the user here.
-     */
-    const { data } = await axios.post('/api/auth/refreshToken', {
-      refreshToken
-    });
+    try {
+      /** Requesting a new access token using our refresh token.
+       * Server will create a new access token and send it to the frontend.
+       * Refresh token is required to authenticate the user here.
+       */
+      const { data } = await axios.post('/api/auth/refreshToken', {
+        refreshToken
+      });
 
-    return data?.accessToken;
+      return data?.accessToken;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+
+      if (axiosError.response?.status === 401) {
+        // Dispatch logout action here..
+      }
+
+      throw error;
+    }
   }
 );
 

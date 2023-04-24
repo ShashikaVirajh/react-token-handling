@@ -1,52 +1,73 @@
-import axios from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
+import { useSelector } from 'react-redux';
+import { AppDispatch, RootState, store } from './store/store';
+import { setAccessToken, setRefreshToken } from './store/auth-slice';
 
-const baseURL = 'https://your-api-base-url.com/';
+type ResponseData = {
+  data: any;
+};
 
 type TokenResponse = {
-  accessToken: string;
-  refreshToken: string;
+  data: {
+    accessToken: string;
+    refreshToken: string;
+  };
 };
 
-let accessToken: string | null = null;
-let refreshToken: string | null = null;
-
-export const handleAccessToken = (token: string | null) => {
-  accessToken = token;
-};
-
-export const handleRefreshToken = (token: string | null) => {
-  refreshToken = token;
-};
-
-const api = axios.create({
-  baseURL
+const axiosInstance: AxiosInstance = axios.create({
+  baseURL: process.env.REACT_APP_API_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
 
-api.interceptors.request.use((config) => {
+axiosInstance.interceptors.request.use((config) => {
+  const accessToken = useSelector((state: RootState) => state.auth.accessToken);
+
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
+
   return config;
 });
 
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-    if (error.response.status === 401 && !originalRequest._retry && refreshToken) {
-      originalRequest._retry = true;
+axiosInstance.interceptors.response.use(
+  // If the response is a success
+  (response: ResponseData) => {
+    return response.data;
+  },
+  // If the response is an error
+  async (error: AxiosError) => {
+    const dispatch = store.dispatch as AppDispatch;
+
+    // const originalRequest = error?.config;
+
+    if (error.response?.status === 401) {
+      const refreshToken = useSelector((state: RootState) => state.auth.refreshToken);
 
       try {
-        const response = await axios.post<TokenResponse>(`${baseURL}/auth/refresh`, {
+        // Request to refresh the access token using current refresh token.
+        const { data }: TokenResponse = await axios.post('/api/auth/refreshToken', {
           refreshToken
         });
 
-        handleAccessToken(response.data.accessToken);
-        handleRefreshToken(response.data.refreshToken);
+        dispatch(setAccessToken(data.accessToken));
+        dispatch(setRefreshToken(data.refreshToken));
 
-        return api(originalRequest);
-      } catch (err) {
-        console.log('Error refreshing token:', err);
+        // Resend the original request with the new access token.
+        const originalRequest = error.config;
+
+        if (!originalRequest) throw error;
+
+        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+        return axiosInstance(originalRequest);
+      } catch (error) {
+        // TODO: Dispatch logout action here..
+
+        dispatch(setAccessToken(null));
+        dispatch(setRefreshToken(null));
+
+        return Promise.reject(error);
       }
     }
 
@@ -54,4 +75,4 @@ api.interceptors.response.use(
   }
 );
 
-export default api;
+export default axiosInstance;
