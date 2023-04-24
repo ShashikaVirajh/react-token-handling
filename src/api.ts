@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { useSelector } from 'react-redux';
 import { AppDispatch, RootState, store } from './store/store';
-import { setAccessToken, setRefreshToken } from './store/auth-slice';
+import { refreshAccessToken, setAccessToken, setRefreshToken } from './store/auth-slice';
 
 type ResponseData = {
   data: any;
@@ -43,23 +43,20 @@ axiosInstance.interceptors.response.use(
     // const originalRequest = error?.config;
 
     if (error.response?.status === 401) {
-      const refreshToken = useSelector((state: RootState) => state.auth.refreshToken);
+      const refreshToken = useSelector((state: RootState) => state.auth.refreshToken) ?? '';
+      const accessToken = useSelector((state: RootState) => state.auth.accessToken) ?? '';
 
       try {
         // Request to refresh the access token using current refresh token.
-        const { data }: TokenResponse = await axios.post('/api/auth/refreshToken', {
-          refreshToken
-        });
-
-        dispatch(setAccessToken(data.accessToken));
-        dispatch(setRefreshToken(data.refreshToken));
+        // Once the tokens are received, they are stored in the auth slice.
+        dispatch(refreshAccessToken(refreshToken));
 
         // Resend the original request with the new access token.
         const originalRequest = error.config;
 
         if (!originalRequest) throw error;
 
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return axiosInstance(originalRequest);
       } catch (error) {
         // TODO: Dispatch logout action here..
